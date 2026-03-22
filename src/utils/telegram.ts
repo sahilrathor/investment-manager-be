@@ -29,6 +29,7 @@ export async function sendMessage(
     if (!bot) return false;
 
     await bot.sendMessage(chatId, message, { parse_mode: "HTML" });
+    logger.info("Sent Telegram Messages: ", {chatId, message});
     return true;
   } catch (error) {
     logger.error({ error, chatId }, "Failed to send Telegram message");

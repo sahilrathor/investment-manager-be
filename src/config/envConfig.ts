@@ -8,6 +8,7 @@ export const envConfig = {
   NODE_ENV: env.NODE_ENV || 'development',
   isDev: (env.NODE_ENV || 'development') === 'development',
   isProd: env.NODE_ENV === 'production',
+  DEBUG: env.DEBUG || false,
 
   DATABASE_URL: env.DATABASE_URL!,
 

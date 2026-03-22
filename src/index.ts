@@ -9,6 +9,8 @@ import { envConfig } from './config/envConfig';
 import { errorHandler } from './middleware/errorHandler';
 import { updatePrices, checkAlerts } from './jobs/priceUpdater';
 import logger from './utils/logger';
+import { sendMessage } from './utils/telegram';
+import { env } from 'process';
 
 const app = express();
 
@@ -34,6 +36,8 @@ app.use(errorHandler);
 // Start server
 app.listen(envConfig.PORT, () => {
   logger.info(`Server running on port ${envConfig.PORT} [${envConfig.NODE_ENV}]`);
+  envConfig.DEBUG === 'true' && sendMessage(envConfig.TELEGRAM_CHAT_ID, 'Investments Manager started successfully!');
+  // console.log(envConfig.DEBUG)
 
   // Start cron jobs
   cron.schedule(envConfig.PRICE_UPDATE_INTERVAL, () => {
