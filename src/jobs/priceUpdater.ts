@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { db } from '../db';
-import { assets, users, priceAlerts, portfolios } from '../db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { assets, users, priceAlerts } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { envConfig } from '../config/envConfig';
-import { sendTelegramAlert } from '../services/telegram';
+import { sendPriceAlert } from '../utils/telegram';
 import logger from '../utils/logger';
 
 const finnhub = axios.create({
@@ -108,18 +108,14 @@ export async function checkAlerts(): Promise<void> {
           .where(eq(users.id, alert.userId));
 
         if (user?.telegramChatId) {
-          const emoji = alert.direction === 'above' ? '📈' : '📉';
-          const message = [
-            `${emoji} <b>PRICE ALERT</b>`,
-            ``,
-            `<b>${alert.assetName}</b> (${alert.assetSymbol})`,
-            `Current: <b>$${alert.currentPrice?.toFixed(2)}</b>`,
-            `Target: ${alert.direction} $${alert.targetPrice.toFixed(2)}`,
-            ``,
-            `Time: ${new Date().toISOString().slice(0, 19)}`,
-          ].join('\n');
-
-          await sendTelegramAlert(user.telegramChatId, message);
+          await sendPriceAlert(
+            user.telegramChatId,
+            alert.assetName,
+            alert.assetSymbol,
+            alert.currentPrice!,
+            alert.targetPrice,
+            alert.direction
+          );
         }
 
         logger.info({ alertId: alert.id }, 'Price alert triggered');

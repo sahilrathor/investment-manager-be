@@ -3,6 +3,7 @@ import { db } from '../db';
 import { priceAlerts, assets, portfolios } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import logger from '../utils/logger';
+import { fetchLivePrices } from '../utils/priceFetcher';
 
 const AlertService = {
   async getAll(req: Request, res: Response) {
@@ -20,12 +21,47 @@ const AlertService = {
         assetSymbol: assets.symbol,
         assetType: assets.type,
         currentPrice: assets.currentPrice,
+        useLivePrice: assets.useLivePrice,
+        manualPrice: assets.manualPrice,
       })
         .from(priceAlerts)
         .innerJoin(assets, eq(priceAlerts.assetId, assets.id))
         .where(eq(priceAlerts.userId, userId));
 
-      res.json({ success: true, data: alerts });
+      const seen = new Set<string>();
+      const assetList = alerts
+        .filter((a) => {
+          if (seen.has(a.assetId)) return false;
+          seen.add(a.assetId);
+          return true;
+        })
+        .map((a) => ({
+          id: a.assetId,
+          symbol: a.assetSymbol,
+          type: a.assetType,
+          useLivePrice: a.useLivePrice,
+        }));
+
+      const livePrices = await fetchLivePrices(assetList);
+
+      const data = alerts.map((alert) => {
+        const livePrice = livePrices.get(alert.assetId);
+        const price = livePrice ?? alert.manualPrice ?? alert.currentPrice;
+        return {
+          id: alert.id,
+          assetId: alert.assetId,
+          targetPrice: alert.targetPrice,
+          direction: alert.direction,
+          isTriggered: alert.isTriggered,
+          createdAt: alert.createdAt,
+          assetName: alert.assetName,
+          assetSymbol: alert.assetSymbol,
+          assetType: alert.assetType,
+          currentPrice: price,
+        };
+      });
+
+      res.json({ success: true, data });
     } catch (error) {
       logger.error(error, 'Get alerts failed');
       res.status(500).json({ success: false, message: 'Failed to get alerts' });

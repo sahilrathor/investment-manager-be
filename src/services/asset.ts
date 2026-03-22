@@ -3,6 +3,7 @@ import { db } from '../db';
 import { assets, portfolios } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import logger from '../utils/logger';
+import { fetchLivePrices } from '../utils/priceFetcher';
 
 const AssetService = {
   async getAll(req: Request, res: Response) {
@@ -20,7 +21,17 @@ const AssetService = {
 
       const portfolioAssets = await db.select().from(assets).where(eq(assets.portfolioId, portfolioId));
 
-      res.json({ success: true, data: portfolioAssets });
+      const livePrices = await fetchLivePrices(portfolioAssets);
+
+      const data = portfolioAssets.map((asset) => {
+        const livePrice = livePrices.get(asset.id);
+        return {
+          ...asset,
+          currentPrice: livePrice ?? asset.manualPrice ?? asset.currentPrice,
+        };
+      });
+
+      res.json({ success: true, data });
     } catch (error) {
       logger.error(error, 'Get assets failed');
       res.status(500).json({ success: false, message: 'Failed to get assets' });
@@ -54,7 +65,16 @@ const AssetService = {
         return res.status(404).json({ success: false, message: 'Asset not found' });
       }
 
-      res.json({ success: true, data: asset });
+      let currentPrice = asset.currentPrice;
+      if (asset.useLivePrice) {
+        const livePrices = await fetchLivePrices([asset]);
+        const livePrice = livePrices.get(asset.id);
+        if (livePrice != null) currentPrice = livePrice;
+      } else if (asset.manualPrice != null) {
+        currentPrice = asset.manualPrice;
+      }
+
+      res.json({ success: true, data: { ...asset, currentPrice } });
     } catch (error) {
       logger.error(error, 'Get asset failed');
       res.status(500).json({ success: false, message: 'Failed to get asset' });

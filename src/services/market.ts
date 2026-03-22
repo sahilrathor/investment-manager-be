@@ -14,31 +14,49 @@ const coingecko = axios.create({
 
 const MarketService = {
   async getStockPrice(req: Request, res: Response) {
+    const { symbol } = req.params;
     try {
-      const { symbol } = req.params;
 
       if (!envConfig.FINNHUB_API_KEY) {
         return res.status(503).json({ success: false, message: 'Finnhub API key not configured' });
       }
 
-      const response = await finnhub.get('/quote', { params: { symbol: symbol.toUpperCase() } });
+      const normalizedSymbol = symbol.toUpperCase().replace(/\.(NS|BO|NSE|BSE)$/, '');
+      const response = await finnhub.get('/quote', { params: { symbol: normalizedSymbol } });
       const data = response.data;
 
-      res.json({
-        success: true,
-        data: {
-          symbol: symbol.toUpperCase(),
-          price: data.c,
-          change: data.d,
-          changePercent: data.dp,
-          high: data.h,
-          low: data.l,
-          open: data.o,
-          previousClose: data.pc,
-        },
+      if (data.c) {
+        return res.json({
+          success: true,
+          data: {
+            symbol: normalizedSymbol,
+            price: data.c,
+            change: data.d,
+            changePercent: data.dp,
+            high: data.h,
+            low: data.l,
+            open: data.o,
+            previousClose: data.pc,
+          },
+        });
+      }
+
+      const searchTerm = normalizedSymbol.replace(/[^a-zA-Z0-9]/g, '');
+      const searchRes = await finnhub.get('/search', { params: { q: searchTerm } });
+      const suggestions = (searchRes.data?.result || []).slice(0, 5).map((item: any) => ({
+        symbol: item.symbol,
+        name: item.description,
+        type: 'stock',
+      }));
+
+      return res.status(404).json({
+        success: false,
+        message: `Stock symbol '${symbol.toUpperCase()}' not found`,
+        suggestions,
       });
-    } catch (error) {
-      logger.error(error, 'Get stock price failed');
+    } catch (error: any) {
+      const status = error?.response?.status;
+      logger.error({ err: error, symbol, finnhubStatus: status }, 'Get stock price failed');
       res.status(500).json({ success: false, message: 'Failed to fetch stock price' });
     }
   },

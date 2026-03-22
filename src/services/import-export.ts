@@ -3,6 +3,7 @@ import { db } from '../db';
 import { assets, transactions, portfolios } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import logger from '../utils/logger';
+import { fetchLivePrices } from '../utils/priceFetcher';
 
 const ImportExportService = {
   async importCsv(req: Request, res: Response) {
@@ -100,13 +101,24 @@ const ImportExportService = {
           quantity: assets.quantity,
           avgBuyPrice: assets.avgBuyPrice,
           currentPrice: assets.currentPrice,
+          manualPrice: assets.manualPrice,
           useLivePrice: assets.useLivePrice,
         })
           .from(assets)
           .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
           .where(eq(portfolios.userId, userId));
 
-        res.json({ success: true, data: userAssets });
+        const livePrices = await fetchLivePrices(userAssets);
+
+        const data = userAssets.map((asset) => {
+          const livePrice = livePrices.get(asset.id);
+          return {
+            ...asset,
+            currentPrice: livePrice ?? asset.manualPrice ?? asset.currentPrice,
+          };
+        });
+
+        res.json({ success: true, data });
       } else {
         res.status(400).json({ success: false, message: 'Invalid export type. Use "transactions" or "assets"' });
       }
