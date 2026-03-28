@@ -71,7 +71,7 @@ const TransactionService = {
         return res.status(400).json({ success: false, message: 'Type, quantity, pricePerUnit and date are required' });
       }
 
-      const [asset] = await db.select({ id: assets.id })
+      const [asset] = await db.select()
         .from(assets)
         .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
         .where(and(eq(assets.id, assetId), eq(portfolios.userId, userId)));
@@ -91,6 +91,29 @@ const TransactionService = {
         date: new Date(date),
         notes: notes || null,
       }).returning();
+
+      // Update asset quantity and avg buy price
+      const currentAsset = asset.assets;
+      let newQuantity: number;
+      let newAvgPrice: number;
+
+      if (type === 'buy') {
+        const totalCost = (currentAsset.quantity * currentAsset.avgBuyPrice) + (quantity * pricePerUnit);
+        newQuantity = currentAsset.quantity + quantity;
+        newAvgPrice = newQuantity > 0 ? totalCost / newQuantity : 0;
+      } else {
+        newQuantity = Math.max(0, currentAsset.quantity - quantity);
+        newAvgPrice = currentAsset.avgBuyPrice; // avg price stays same on sell
+      }
+
+      await db.update(assets)
+        .set({
+          quantity: newQuantity,
+          avgBuyPrice: newAvgPrice,
+          currentPrice: pricePerUnit,
+          updatedAt: new Date(),
+        })
+        .where(eq(assets.id, assetId));
 
       res.status(201).json({ success: true, data: txn });
     } catch (error) {

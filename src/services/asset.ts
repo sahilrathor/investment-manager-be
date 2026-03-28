@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { db } from '../db';
-import { assets, portfolios } from '../db/schema';
+import { assets, portfolios, transactions } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import logger from '../utils/logger';
-import { fetchLivePrices } from '@/utils/priceFetcher';
+import { fetchLivePrices } from '../utils/priceFetcher';
 
 const AssetService = {
   async getAllForUser(req: Request, res: Response) {
@@ -95,16 +95,7 @@ const AssetService = {
         return res.status(404).json({ success: false, message: 'Asset not found' });
       }
 
-      let currentPrice = asset.currentPrice;
-      if (asset.useLivePrice) {
-        const livePrices = await fetchLivePrices([asset]);
-        const livePrice = livePrices.get(asset.id);
-        if (livePrice != null) currentPrice = livePrice;
-      } else if (asset.manualPrice != null) {
-        currentPrice = asset.manualPrice;
-      }
-
-      res.json({ success: true, data: { ...asset, currentPrice } });
+      res.json({ success: true, data: asset });
     } catch (error) {
       logger.error(error, 'Get asset failed');
       res.status(500).json({ success: false, message: 'Failed to get asset' });
@@ -129,17 +120,33 @@ const AssetService = {
         return res.status(404).json({ success: false, message: 'Portfolio not found' });
       }
 
+      const buyQty = Number(quantity) || 0;
+      const buyPrice = Number(avgBuyPrice) || Number(currentPrice) || 0;
+
       const [asset] = await db.insert(assets).values({
         portfolioId,
         type,
         symbol,
         name,
-        quantity: quantity || 0,
-        avgBuyPrice: avgBuyPrice || 0,
-        currentPrice: currentPrice || 0,
+        quantity: buyQty,
+        avgBuyPrice: buyPrice,
+        currentPrice: Number(currentPrice) || buyPrice,
         manualPrice: manualPrice || null,
         useLivePrice: useLivePrice !== false,
       }).returning();
+
+      // Auto-create initial buy transaction if quantity > 0
+      if (buyQty > 0 && buyPrice > 0) {
+        await db.insert(transactions).values({
+          assetId: asset.id,
+          type: 'buy',
+          quantity: buyQty,
+          pricePerUnit: buyPrice,
+          totalAmount: buyQty * buyPrice,
+          date: new Date(),
+          notes: 'Initial purchase',
+        });
+      }
 
       res.status(201).json({ success: true, data: asset });
     } catch (error) {
