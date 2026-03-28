@@ -383,6 +383,31 @@ const MarketService = {
       res.status(500).json({ success: false, message: 'Failed to compare assets' });
     }
   },
+
+  async getExchangeRate(req: Request, res: Response) {
+    try {
+      // Use free open.er-api.com for USD to INR rate
+      const response = await axios.get('https://open.er-api.com/v6/latest/USD');
+      const inrRate = response.data?.rates?.INR;
+
+      if (!inrRate) {
+        return res.status(500).json({ success: false, message: 'Could not fetch exchange rate' });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          from: 'USD',
+          to: 'INR',
+          rate: inrRate,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      logger.error(error, 'Get exchange rate failed');
+      res.status(500).json({ success: false, message: 'Failed to fetch exchange rate' });
+    }
+  },
 };
 
 export default MarketService;

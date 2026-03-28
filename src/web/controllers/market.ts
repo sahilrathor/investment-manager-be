@@ -8,6 +8,12 @@ export class MarketController implements WebController {
 
   ROUTES: WebRoute[] = [
     {
+      url: '/exchange-rate',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getExchangeRate(req, res),
+      authProvider,
+    },
+    {
       url: '/indices',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => MarketService.getIndices(req, res),
