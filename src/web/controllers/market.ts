@@ -8,6 +8,24 @@ export class MarketController implements WebController {
 
   ROUTES: WebRoute[] = [
     {
+      url: '/indices',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getIndices(req, res),
+      authProvider,
+    },
+    {
+      url: '/compare',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getCompare(req, res),
+      authProvider,
+    },
+    {
+      url: '/history/:symbol',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getPriceHistory(req, res),
+      authProvider,
+    },
+    {
       url: '/stock/:symbol',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => MarketService.getStockPrice(req, res),

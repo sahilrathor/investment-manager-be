@@ -217,6 +217,172 @@ const MarketService = {
       res.status(500).json({ success: false, message: 'Search failed' });
     }
   },
+
+  async getPriceHistory(req: Request, res: Response) {
+    const { symbol } = req.params;
+    const range = (req.query.range as string) || '1m'; // 1w, 1m, 3m, 6m, 1y
+    const rawSymbol = symbol.toUpperCase();
+
+    try {
+      // Map range to Yahoo Finance intervals
+      const rangeMap: Record<string, { interval: string; range: string }> = {
+        '1w': { interval: '1d', range: '5d' },
+        '1m': { interval: '1d', range: '1mo' },
+        '3m': { interval: '1d', range: '3mo' },
+        '6m': { interval: '1wk', range: '6mo' },
+        '1y': { interval: '1wk', range: '1y' },
+      };
+
+      const config = rangeMap[range] || rangeMap['1m'];
+
+      const response = await yahooFinance.get(`/chart/${rawSymbol}`, {
+        params: { interval: config.interval, range: config.range },
+      });
+
+      const result = response.data?.chart?.result?.[0];
+      if (!result) {
+        return res.status(404).json({ success: false, message: 'Price history not found' });
+      }
+
+      const timestamps = result.timestamp || [];
+      const quotes = result.indicators?.quote?.[0] || {};
+      const closes = quotes.close || [];
+      const highs = quotes.high || [];
+      const lows = quotes.low || [];
+      const volumes = quotes.volume || [];
+
+      const history = timestamps.map((ts: number, i: number) => ({
+        date: new Date(ts * 1000).toISOString().split('T')[0],
+        close: closes[i] || 0,
+        high: highs[i] || 0,
+        low: lows[i] || 0,
+        volume: volumes[i] || 0,
+      })).filter((h: any) => h.close > 0);
+
+      res.json({ success: true, data: history });
+    } catch (error) {
+      logger.error({ err: error, symbol: rawSymbol }, 'Get price history failed');
+      res.status(500).json({ success: false, message: 'Failed to fetch price history' });
+    }
+  },
+
+  async getIndices(req: Request, res: Response) {
+    const indices = [
+      { symbol: '^NSEI', name: 'NIFTY 50', fullName: 'NSE Nifty 50' },
+      { symbol: '^BSESN', name: 'SENSEX', fullName: 'BSE Sensex' },
+      { symbol: '^NSEBANK', name: 'BANK NIFTY', fullName: 'Nifty Bank' },
+      { symbol: '^CNXIT', name: 'NIFTY IT', fullName: 'Nifty IT' },
+      { symbol: '^CNXPHARMA', name: 'NIFTY PHARMA', fullName: 'Nifty Pharma' },
+      { symbol: '^CNXAUTO', name: 'NIFTY AUTO', fullName: 'Nifty Auto' },
+      { symbol: '^CNXFMCG', name: 'NIFTY FMCG', fullName: 'Nifty FMCG' },
+      { symbol: '^NSEMDCP50', name: 'NIFTY MIDCAP 50', fullName: 'Nifty Midcap 50' },
+    ];
+
+    try {
+      const results = await Promise.allSettled(
+        indices.map(async (index) => {
+          const response = await yahooFinance.get(`/chart/${encodeURIComponent(index.symbol)}`, {
+            params: { interval: '1d', range: '5d' },
+          });
+          const result = response.data?.chart?.result?.[0];
+          if (!result) return null;
+
+          const meta = result.meta;
+          const price = meta.regularMarketPrice;
+          const prevClose = meta.chartPreviousClose || meta.previousClose;
+          const change = price - prevClose;
+          const changePercent = prevClose ? (change / prevClose) * 100 : 0;
+
+          // Get last 5 days for sparkline
+          const quotes = result.indicators?.quote?.[0] || {};
+          const closes = (quotes.close || []).filter((c: number) => c > 0);
+          const sparkline = closes.slice(-5);
+
+          return {
+            symbol: index.symbol,
+            name: index.name,
+            fullName: index.fullName,
+            price,
+            change,
+            changePercent,
+            high: meta.regularMarketDayHigh || price,
+            low: meta.regularMarketDayLow || price,
+            sparkline,
+          };
+        })
+      );
+
+      const data = results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && r.value !== null)
+        .map(r => r.value);
+
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error(error, 'Get indices failed');
+      res.status(500).json({ success: false, message: 'Failed to fetch indices' });
+    }
+  },
+
+  async getCompare(req: Request, res: Response) {
+    const { symbol1, symbol2 } = req.query;
+    const range = (req.query.range as string) || '1m';
+
+    if (!symbol1 || !symbol2) {
+      return res.status(400).json({ success: false, message: 'symbol1 and symbol2 are required' });
+    }
+
+    try {
+      const rangeMap: Record<string, { interval: string; range: string }> = {
+        '1w': { interval: '1d', range: '5d' },
+        '1m': { interval: '1d', range: '1mo' },
+        '3m': { interval: '1d', range: '3mo' },
+        '6m': { interval: '1wk', range: '6mo' },
+        '1y': { interval: '1wk', range: '1y' },
+      };
+      const config = rangeMap[range] || rangeMap['1m'];
+
+      const [res1, res2] = await Promise.all([
+        yahooFinance.get(`/chart/${encodeURIComponent(symbol1 as string)}`, { params: config }),
+        yahooFinance.get(`/chart/${encodeURIComponent(symbol2 as string)}`, { params: config }),
+      ]);
+
+      const extractHistory = (response: any) => {
+        const result = response.data?.chart?.result?.[0];
+        if (!result) return [];
+        const timestamps = result.timestamp || [];
+        const closes = result.indicators?.quote?.[0]?.close || [];
+        return timestamps.map((ts: number, i: number) => ({
+          date: new Date(ts * 1000).toISOString().split('T')[0],
+          close: closes[i] || 0,
+        })).filter((h: any) => h.close > 0);
+      };
+
+      const history1 = extractHistory(res1);
+      const history2 = extractHistory(res2);
+
+      // Normalize to percentage change from first value
+      const normalize = (data: any[]) => {
+        if (data.length === 0) return [];
+        const base = data[0].close;
+        return data.map(d => ({
+          date: d.date,
+          value: ((d.close - base) / base) * 100,
+          price: d.close,
+        }));
+      };
+
+      res.json({
+        success: true,
+        data: {
+          asset1: { symbol: symbol1, history: normalize(history1) },
+          asset2: { symbol: symbol2, history: normalize(history2) },
+        },
+      });
+    } catch (error) {
+      logger.error(error, 'Compare assets failed');
+      res.status(500).json({ success: false, message: 'Failed to compare assets' });
+    }
+  },
 };
 
 export default MarketService;
