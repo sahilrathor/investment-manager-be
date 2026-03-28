@@ -3,7 +3,6 @@ import { db } from '../db';
 import { assets, transactions, portfolios } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import logger from '../utils/logger';
-import { fetchLivePrices } from '../utils/priceFetcher';
 
 const ImportExportService = {
   async importCsv(req: Request, res: Response) {
@@ -69,14 +68,15 @@ const ImportExportService = {
   async exportCsv(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
-      const { type } = req.query;
+      const { type, assetType } = req.query;
 
       if (type === 'transactions') {
-        const txns = await db.select({
+        let query = db.select({
           id: transactions.id,
           assetId: transactions.assetId,
           assetSymbol: assets.symbol,
           assetName: assets.name,
+          assetType: assets.type,
           type: transactions.type,
           quantity: transactions.quantity,
           pricePerUnit: transactions.pricePerUnit,
@@ -90,7 +90,14 @@ const ImportExportService = {
           .where(eq(portfolios.userId, userId))
           .orderBy(desc(transactions.date));
 
-        res.json({ success: true, data: txns });
+        const txns = await query;
+
+        // Filter by asset type if specified
+        const filtered = assetType && assetType !== 'all'
+          ? txns.filter((t: any) => t.assetType === assetType)
+          : txns;
+
+        res.json({ success: true, data: filtered });
       } else if (type === 'assets') {
         const userAssets = await db.select({
           id: assets.id,
@@ -108,17 +115,12 @@ const ImportExportService = {
           .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
           .where(eq(portfolios.userId, userId));
 
-        const livePrices = await fetchLivePrices(userAssets);
+        // Filter by asset type if specified
+        const filtered = assetType && assetType !== 'all'
+          ? userAssets.filter((a: any) => a.type === assetType)
+          : userAssets;
 
-        const data = userAssets.map((asset) => {
-          const livePrice = livePrices.get(asset.id);
-          return {
-            ...asset,
-            currentPrice: livePrice ?? asset.manualPrice ?? asset.currentPrice,
-          };
-        });
-
-        res.json({ success: true, data });
+        res.json({ success: true, data: filtered });
       } else {
         res.status(400).json({ success: false, message: 'Invalid export type. Use "transactions" or "assets"' });
       }
