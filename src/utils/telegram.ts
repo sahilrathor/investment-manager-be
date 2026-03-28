@@ -96,6 +96,53 @@ export async function sendPortfolioSummary(
   return sendMessage(chatId, message);
 }
 
+export async function sendNewsAlert(
+  chatId: string,
+  assetName: string,
+  assetSymbol: string,
+  headline: string,
+  sentiment: string,
+  url: string
+): Promise<boolean> {
+  const emoji = sentiment === 'positive' ? '🟢' : sentiment === 'negative' ? '🔴' : '⚪';
+  const message = [
+    `📰 <b>NEWS ALERT</b>`,
+    ``,
+    `<b>${assetName}</b> (${assetSymbol}) ${emoji} ${sentiment.toUpperCase()}`,
+    ``,
+    headline,
+    ``,
+    `<a href="${url}">Read more</a>`,
+  ].join("\n");
+
+  return sendMessage(chatId, message);
+}
+
+export async function sendEarningsAlert(
+  chatId: string,
+  assetName: string,
+  assetSymbol: string,
+  date: string,
+  epsActual: number | null,
+  epsEstimate: number | null,
+  beat: boolean | null
+): Promise<boolean> {
+  const emoji = beat === true ? '🟢' : beat === false ? '🔴' : '📅';
+  const lines = [
+    `📅 <b>EARNINGS REPORT</b>`,
+    ``,
+    `<b>${assetName}</b> (${assetSymbol})`,
+    `Date: ${date}`,
+  ];
+
+  if (epsActual != null) lines.push(`EPS Actual: <b>$${epsActual.toFixed(2)}</b>`);
+  if (epsEstimate != null) lines.push(`EPS Estimate: $${epsEstimate.toFixed(2)}`);
+  if (beat === true) lines.push(`${emoji} Beat estimate!`);
+  else if (beat === false) lines.push(`${emoji} Missed estimate`);
+
+  return sendMessage(chatId, lines.join("\n"));
+}
+
 export function isConfigured(): boolean {
   return !!envConfig.TELEGRAM_BOT_TOKEN;
 }

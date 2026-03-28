@@ -8,6 +8,7 @@ import { RoutesConfig } from './routesConfig';
 import { envConfig } from './config/envConfig';
 import { errorHandler } from './middleware/errorHandler';
 import { updatePrices, checkAlerts } from './jobs/priceUpdater';
+import { checkNews } from './jobs/newsChecker';
 import logger from './utils/logger';
 import { sendMessage } from './utils/telegram';
 import { env } from 'process';
@@ -48,6 +49,12 @@ app.listen(envConfig.PORT, () => {
   cron.schedule(envConfig.ALERT_CHECK_INTERVAL, () => {
     logger.debug('Running alert check job');
     checkAlerts();
+  });
+
+  // News check every 30 minutes
+  cron.schedule('*/30 * * * *', () => {
+    logger.debug('Running news check job');
+    checkNews();
   });
 
   logger.info('Cron jobs started');
