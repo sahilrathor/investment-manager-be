@@ -8,6 +8,12 @@ export class AssetController implements WebController {
 
   ROUTES: WebRoute[] = [
     {
+      url: '/assets',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => AssetService.getAllForUser(req, res),
+      authProvider,
+    },
+    {
       url: '/portfolios/:portfolioId/assets',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => AssetService.getAll(req, res),

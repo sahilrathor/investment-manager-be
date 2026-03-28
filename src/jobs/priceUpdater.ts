@@ -30,6 +30,7 @@ export async function updatePrices(): Promise<void> {
         try {
           const response = await finnhub.get('/quote', { params: { symbol: asset.symbol } });
           const price = response.data.c;
+          // console.log({price})
           if (price > 0) {
             await db.update(assets)
               .set({ currentPrice: price, updatedAt: new Date() })
@@ -55,6 +56,7 @@ export async function updatePrices(): Promise<void> {
 
         for (const asset of cryptos) {
           const price = response.data[asset.symbol.toLowerCase()]?.usd;
+          // console.log({price});
           if (price) {
             await db.update(assets)
               .set({ currentPrice: price, updatedAt: new Date() })

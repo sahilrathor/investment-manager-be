@@ -3,9 +3,39 @@ import { db } from '../db';
 import { assets, portfolios } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import logger from '../utils/logger';
-import { fetchLivePrices } from '../utils/priceFetcher';
+import { fetchLivePrices } from '@/utils/priceFetcher';
 
 const AssetService = {
+  async getAllForUser(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+
+      const userAssets = await db.select({
+        id: assets.id,
+        portfolioId: assets.portfolioId,
+        type: assets.type,
+        symbol: assets.symbol,
+        name: assets.name,
+        quantity: assets.quantity,
+        avgBuyPrice: assets.avgBuyPrice,
+        currentPrice: assets.currentPrice,
+        manualPrice: assets.manualPrice,
+        useLivePrice: assets.useLivePrice,
+        createdAt: assets.createdAt,
+        updatedAt: assets.updatedAt,
+        portfolioName: portfolios.name,
+      })
+        .from(assets)
+        .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
+        .where(eq(portfolios.userId, userId));
+
+      res.json({ success: true, data: userAssets });
+    } catch (error) {
+      logger.error(error, 'Get all assets failed');
+      res.status(500).json({ success: false, message: 'Failed to get assets' });
+    }
+  },
+
   async getAll(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
