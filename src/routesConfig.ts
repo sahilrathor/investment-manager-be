@@ -8,6 +8,7 @@ import { AlertController } from './web/controllers/alert';
 import { MarketController } from './web/controllers/market';
 import { ImportExportController } from './web/controllers/import-export';
 import { TelegramController } from './web/controllers/telegram';
+import { HealthController } from './web/controllers/health';
 
 export const RoutesConfig = (): WebController[] => [
   new AuthController(),
@@ -19,4 +20,5 @@ export const RoutesConfig = (): WebController[] => [
   new MarketController(),
   new ImportExportController(),
   new TelegramController(),
+  new HealthController(),
 ];
