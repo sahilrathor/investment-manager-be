@@ -27,6 +27,12 @@ export class TransactionController implements WebController {
     },
     {
       url: '/transactions/:id',
+      method: HttpMethods.PUT,
+      service: (req: Request, res: Response) => TransactionService.update(req, res),
+      authProvider,
+    },
+    {
+      url: '/transactions/:id',
       method: HttpMethods.DELETE,
       service: (req: Request, res: Response) => TransactionService.delete(req, res),
       authProvider,

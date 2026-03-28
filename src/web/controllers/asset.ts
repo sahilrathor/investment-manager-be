@@ -46,6 +46,12 @@ export class AssetController implements WebController {
       authProvider,
     },
     {
+      url: '/assets/:id/move',
+      method: HttpMethods.PATCH,
+      service: (req: Request, res: Response) => AssetService.move(req, res),
+      authProvider,
+    },
+    {
       url: '/assets/:id',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => AssetService.getById(req, res),

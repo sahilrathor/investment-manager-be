@@ -145,6 +145,48 @@ const TransactionService = {
       res.status(500).json({ success: false, message: 'Failed to delete transaction' });
     }
   },
+
+  async update(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { id } = req.params;
+      const { notes, quantity, pricePerUnit, date } = req.body;
+
+      const [txn] = await db.select({ id: transactions.id })
+        .from(transactions)
+        .innerJoin(assets, eq(transactions.assetId, assets.id))
+        .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
+        .where(and(eq(transactions.id, id), eq(portfolios.userId, userId)));
+
+      if (!txn) {
+        return res.status(404).json({ success: false, message: 'Transaction not found' });
+      }
+
+      const updateData: any = {};
+      if (notes !== undefined) updateData.notes = notes;
+      if (quantity !== undefined) updateData.quantity = Number(quantity);
+      if (pricePerUnit !== undefined) updateData.pricePerUnit = Number(pricePerUnit);
+      if (date !== undefined) updateData.date = new Date(date);
+      if (updateData.quantity && updateData.pricePerUnit) {
+        updateData.totalAmount = updateData.quantity * updateData.pricePerUnit;
+      } else if (updateData.quantity || updateData.pricePerUnit) {
+        const [existing] = await db.select().from(transactions).where(eq(transactions.id, id));
+        const q = updateData.quantity ?? existing.quantity;
+        const p = updateData.pricePerUnit ?? existing.pricePerUnit;
+        updateData.totalAmount = q * p;
+      }
+
+      const [updated] = await db.update(transactions)
+        .set(updateData)
+        .where(eq(transactions.id, id))
+        .returning();
+
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      logger.error(error, 'Update transaction failed');
+      res.status(500).json({ success: false, message: 'Failed to update transaction' });
+    }
+  },
 };
 
 export default TransactionService;

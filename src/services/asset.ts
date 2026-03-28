@@ -182,6 +182,49 @@ const AssetService = {
     }
   },
 
+  async move(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { id } = req.params;
+      const { portfolioId: targetPortfolioId } = req.body;
+
+      if (!targetPortfolioId) {
+        return res.status(400).json({ success: false, message: 'portfolioId is required' });
+      }
+
+      const [asset] = await db.select({ id: assets.id, portfolioId: assets.portfolioId })
+        .from(assets)
+        .innerJoin(portfolios, eq(assets.portfolioId, portfolios.id))
+        .where(and(eq(assets.id, id), eq(portfolios.userId, userId)));
+
+      if (!asset) {
+        return res.status(404).json({ success: false, message: 'Asset not found' });
+      }
+
+      if (asset.portfolioId === targetPortfolioId) {
+        return res.status(400).json({ success: false, message: 'Asset is already in this portfolio' });
+      }
+
+      const [targetPortfolio] = await db.select({ id: portfolios.id })
+        .from(portfolios)
+        .where(and(eq(portfolios.id, targetPortfolioId), eq(portfolios.userId, userId)));
+
+      if (!targetPortfolio) {
+        return res.status(404).json({ success: false, message: 'Target portfolio not found' });
+      }
+
+      const [updated] = await db.update(assets)
+        .set({ portfolioId: targetPortfolioId, updatedAt: new Date() })
+        .where(eq(assets.id, id))
+        .returning();
+
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      logger.error(error, 'Move asset failed');
+      res.status(500).json({ success: false, message: 'Failed to move asset' });
+    }
+  },
+
   async delete(req: Request, res: Response) {
     try {
       const userId = req.user!.userId;
