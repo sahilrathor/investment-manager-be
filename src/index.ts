@@ -9,6 +9,7 @@ import { envConfig } from './config/envConfig';
 import { errorHandler } from './middleware/errorHandler';
 import { updatePrices, checkAlerts } from './jobs/priceUpdater';
 import { checkNews } from './jobs/newsChecker';
+import { capturePortfolioSnapshots } from './jobs/portfolioSnapshot';
 import logger from './utils/logger';
 import { sendMessage } from './utils/telegram';
 import { env } from 'process';
@@ -55,6 +56,12 @@ app.listen(envConfig.PORT, () => {
   cron.schedule('*/30 * * * *', () => {
     logger.debug('Running news check job');
     checkNews();
+  });
+
+  // Portfolio snapshot daily at midnight
+  cron.schedule('0 0 * * *', () => {
+    logger.debug('Running portfolio snapshot job');
+    capturePortfolioSnapshots();
   });
 
   logger.info('Cron jobs started');

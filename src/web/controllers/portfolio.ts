@@ -14,6 +14,18 @@ export class PortfolioController implements WebController {
       authProvider,
     },
     {
+      url: '/:id/analytics',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => PortfolioService.getAnalytics(req, res),
+      authProvider,
+    },
+    {
+      url: '/:id/performance',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => PortfolioService.getPerformance(req, res),
+      authProvider,
+    },
+    {
       url: '/:id',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => PortfolioService.getById(req, res),

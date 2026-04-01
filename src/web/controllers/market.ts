@@ -32,15 +32,39 @@ export class MarketController implements WebController {
       authProvider,
     },
     {
+      url: '/stock/:symbol/fundamentals',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getStockFundamentals(req, res),
+      authProvider,
+    },
+    {
       url: '/stock/:symbol',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => MarketService.getStockPrice(req, res),
       authProvider,
     },
     {
+      url: '/crypto/:id/details',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getCryptoDetails(req, res),
+      authProvider,
+    },
+    {
       url: '/crypto/:id',
       method: HttpMethods.GET,
       service: (req: Request, res: Response) => MarketService.getCryptoPrice(req, res),
+      authProvider,
+    },
+    {
+      url: '/screener',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getScreener(req, res),
+      authProvider,
+    },
+    {
+      url: '/undervalued',
+      method: HttpMethods.GET,
+      service: (req: Request, res: Response) => MarketService.getUndervalued(req, res),
       authProvider,
     },
     {

@@ -86,3 +86,13 @@ export const refreshTokens = pgTable('refresh_tokens', {
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// --- Portfolio Snapshots (daily performance tracking) ---
+export const portfolioSnapshots = pgTable('portfolio_snapshots', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  portfolioId: uuid('portfolio_id').notNull().references(() => portfolios.id, { onDelete: 'cascade' }),
+  date: timestamp('date').notNull(),
+  totalValue: real('total_value').notNull().default(0),
+  totalInvested: real('total_invested').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
