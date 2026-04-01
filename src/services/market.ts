@@ -330,14 +330,18 @@ const MarketService = {
 
           const meta = result.meta;
           const price = meta.regularMarketPrice;
-          const prevClose = meta.chartPreviousClose || meta.previousClose;
+
+          // Get closing prices from chart data (last entry may be null for current incomplete day)
+          const quotes = result.indicators?.quote?.[0] || {};
+          const rawCloses: number[] = quotes.close || [];
+          const closes = rawCloses.filter((c: number) => c != null && c > 0);
+          const sparkline = closes.slice(-5);
+
+          // Previous close = last complete day's close from the chart data
+          // NOT chartPreviousClose (which is the start of the range, not the actual previous day)
+          const prevClose = closes.length >= 2 ? closes[closes.length - 1] : (closes[0] || meta.chartPreviousClose);
           const change = price - prevClose;
           const changePercent = prevClose ? (change / prevClose) * 100 : 0;
-
-          // Get last 5 days for sparkline
-          const quotes = result.indicators?.quote?.[0] || {};
-          const closes = (quotes.close || []).filter((c: number) => c > 0);
-          const sparkline = closes.slice(-5);
 
           return {
             symbol: index.symbol,
