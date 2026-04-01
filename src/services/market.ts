@@ -18,11 +18,23 @@ const yahooFinance = axios.create({
   headers: { 'User-Agent': 'Mozilla/5.0' },
 });
 
-// Yahoo Finance v10 for quoteSummary (fundamentals)
+// Yahoo Finance v10 for quoteSummary (fundamentals) - uses crumb auth
 const yahooFinanceV10 = axios.create({
-  baseURL: 'https://query1.finance.yahoo.com/v10/finance',
-  headers: { 'User-Agent': 'Mozilla/5.0' },
+  baseURL: 'https://query2.finance.yahoo.com/v10/finance',
+  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
 });
+
+// Get Yahoo Finance crumb for authenticated requests
+async function getYahooCrumb(): Promise<string | null> {
+  try {
+    const response = await axios.get('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+    return response.data || null;
+  } catch {
+    return null;
+  }
+}
 
 // NIFTY 500 curated list for screener (subset of popular symbols)
 const NIFTY_STOCKS = [
@@ -443,11 +455,76 @@ const MarketService = {
     const rawSymbol = symbol.toUpperCase();
 
     try {
-      const response = await yahooFinanceV10.get(`/quoteSummary/${encodeURIComponent(rawSymbol)}`, {
-        params: { modules: 'financialData,defaultKeyStatistics,summaryDetail,price' },
-      });
+      // Try with crumb authentication first
+      const crumb = await getYahooCrumb();
+      let result = null;
 
-      const result = response.data?.quoteSummary?.result?.[0];
+      if (crumb) {
+        try {
+          const response = await yahooFinanceV10.get(`/quoteSummary/${encodeURIComponent(rawSymbol)}`, {
+            params: {
+              modules: 'financialData,defaultKeyStatistics,summaryDetail,price',
+              crumb,
+            },
+          });
+          result = response.data?.quoteSummary?.result?.[0];
+        } catch {
+          // v10 failed, try fallback
+        }
+      }
+
+      // Fallback: use chart endpoint meta data + defaultKeyStatistics from quote API
+      if (!result) {
+        try {
+          const chartResponse = await yahooFinance.get(`/chart/${encodeURIComponent(rawSymbol)}`, {
+            params: { interval: '1d', range: '1d' },
+          });
+          const chartResult = chartResponse.data?.chart?.result?.[0];
+          if (chartResult) {
+            const meta = chartResult.meta;
+            // Extract what we can from the chart meta
+            result = {
+              financialData: {
+                currentPrice: { raw: meta.regularMarketPrice },
+                returnOnEquity: null,
+                debtToEquity: null,
+                revenueGrowth: null,
+                earningsGrowth: null,
+                currentRatio: null,
+                quickRatio: null,
+                operatingMargins: null,
+                profitMargins: null,
+                grossMargins: null,
+                revenuePerShare: null,
+                targetMeanPrice: null,
+                recommendationKey: null,
+                numberOfAnalystOpinions: null,
+              },
+              defaultKeyStatistics: {
+                priceToBook: null,
+                trailingEps: null,
+                bookValue: null,
+              },
+              summaryDetail: {
+                fiftyTwoWeekHigh: { raw: meta.fiftyTwoWeekHigh },
+                fiftyTwoWeekLow: { raw: meta.fiftyTwoWeekLow },
+                trailingPE: { raw: meta.peRatio || null },
+                forwardPE: null,
+                marketCap: { raw: meta.marketCap || null },
+                dividendYield: { raw: meta.dividendYield || null },
+              },
+              price: {
+                regularMarketPrice: { raw: meta.regularMarketPrice },
+                marketCap: { raw: meta.marketCap || null },
+                quoteType: null,
+              },
+            };
+          }
+        } catch {
+          // chart also failed
+        }
+      }
+
       if (!result) {
         return res.status(404).json({ success: false, message: `Fundamentals for '${rawSymbol}' not found` });
       }
@@ -471,7 +548,7 @@ const MarketService = {
           marketCap: summary.marketCap?.raw || priceData.marketCap?.raw || 0,
           fiftyTwoWeekHigh,
           fiftyTwoWeekLow,
-          peRatio: summary.trailingPE?.raw || null,
+          peRatio: summary.trailingPE?.raw || summary.peRatio?.raw || null,
           forwardPE: summary.forwardPE?.raw || null,
           pbRatio: stats.priceToBook?.raw || null,
           eps: stats.trailingEps?.raw || null,
@@ -663,19 +740,68 @@ const MarketService = {
 async function fetchBatchFundamentals(symbols: string[]): Promise<any[]> {
   const results: any[] = [];
   const batchSize = 5;
+  const crumb = await getYahooCrumb();
 
   for (let i = 0; i < symbols.length; i += batchSize) {
     const batch = symbols.slice(i, i + batchSize);
     const batchResults = await Promise.allSettled(
       batch.map(async (symbol) => {
         try {
-          const response = await yahooFinanceV10.get(`/quoteSummary/${encodeURIComponent(symbol)}`, {
-            params: { modules: 'financialData,defaultKeyStatistics,summaryDetail,price' },
-            timeout: 10000,
-          });
+          let result = null;
 
-          const result = response.data?.quoteSummary?.result?.[0];
-          if (!result) return null;
+          // Try v10 with crumb first
+          if (crumb) {
+            try {
+              const response = await yahooFinanceV10.get(`/quoteSummary/${encodeURIComponent(symbol)}`, {
+                params: {
+                  modules: 'financialData,defaultKeyStatistics,summaryDetail,price',
+                  crumb,
+                },
+                timeout: 10000,
+              });
+              result = response.data?.quoteSummary?.result?.[0];
+            } catch {
+              // fallback to chart
+            }
+          }
+
+          // Fallback to chart endpoint
+          if (!result) {
+            try {
+              const chartResponse = await yahooFinance.get(`/chart/${encodeURIComponent(symbol)}`, {
+                params: { interval: '1d', range: '1d' },
+                timeout: 10000,
+              });
+              const chartResult = chartResponse.data?.chart?.result?.[0];
+              if (chartResult) {
+                const meta = chartResult.meta;
+                return {
+                  symbol,
+                  name: meta.shortName || meta.symbol || symbol,
+                  currentPrice: meta.regularMarketPrice || 0,
+                  marketCap: meta.marketCap || 0,
+                  fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || 0,
+                  fiftyTwoWeekLow: meta.fiftyTwoWeekLow || 0,
+                  peRatio: meta.peRatio || null,
+                  pbRatio: null,
+                  eps: null,
+                  bookValue: null,
+                  roe: null,
+                  debtToEquity: null,
+                  revenueGrowth: null,
+                  profitGrowth: null,
+                  dividendYield: meta.dividendYield || null,
+                  operatingMargins: null,
+                  profitMargins: null,
+                  distanceFrom52WeekHigh: meta.fiftyTwoWeekHigh > 0 ? Math.round(((meta.fiftyTwoWeekHigh - meta.regularMarketPrice) / meta.fiftyTwoWeekHigh) * 10000) / 100 : 0,
+                  distanceFrom52WeekLow: meta.fiftyTwoWeekLow > 0 ? Math.round(((meta.regularMarketPrice - meta.fiftyTwoWeekLow) / meta.fiftyTwoWeekLow) * 10000) / 100 : 0,
+                };
+              }
+            } catch {
+              // chart also failed
+            }
+            return null;
+          }
 
           const financialData = result.financialData || {};
           const stats = result.defaultKeyStatistics || {};
